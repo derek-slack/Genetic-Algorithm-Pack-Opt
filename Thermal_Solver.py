@@ -251,7 +251,7 @@ class ThermalSolver():
                 dz_b = (abs(dz_c) - (self.cell_rz[1])/2)  # distance to border
 
 
-                d_gen = self.dx/0.85 # Generation term
+                d_gen = self.dx/0.95 # Generation term
 
                 # Outer side surface
                 side_wall = (abs(dr_b) <= d_gen) & (abs(dz_c) <= self.cell_rz[1] / 2)

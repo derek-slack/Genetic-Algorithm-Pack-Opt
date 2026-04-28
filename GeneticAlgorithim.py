@@ -49,7 +49,7 @@ class GeneticAlgorithm():
 
             thickness_z = 0.008
             active_volume = jnp.sum(ts.mesh.generation_cells) * dx * dy * thickness_z
-            volumetric_q = 0.35 / active_volume
+            volumetric_q = 0.5 / active_volume
             Q_dot_i = ts.mesh.generation_cells * volumetric_q
             Q_dot_all.append(Q_dot_i)
         print(f'dt set to {dt_old}')

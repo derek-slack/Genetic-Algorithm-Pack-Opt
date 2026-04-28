@@ -24,11 +24,12 @@ class Chromosome:
                     n_ind = 0
                 elif self.parameters[param].max_bit == 'W':
                     n_ind = 1
-                X = self.parameters[self.parameters[param].max_bit].value/2 - (self.pack_geometry['cell_n_xyz'][n_ind]-1)*(self.pack_geometry['cell_rz'][0]-self.pack_geometry['Buffer'])
-                V = self.parameters[self.parameters[param].max_bit].value * (self.parameters[param].value)
+                X = self.parameters[self.parameters[param].max_bit].value/2 - (self.pack_geometry['cell_n_xyz'][n_ind]-1)*(self.pack_geometry['cell_rz'][0]+self.pack_geometry['Buffer'])
+                V = (X-M)* (self.parameters[param].value) + M
             else:
                 V = self.parameters[param].value
                 X = self.parameters[param].max_bit
+
             n = self.parameters[param].n_bit
             param_encode = np.binary_repr(int(np.ceil((V-M)/(X-M)*(2**n-1))),width = self.parameters[param].n_bit)
             parameters_encoded[param].value = param_encode
