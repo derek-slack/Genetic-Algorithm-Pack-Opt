@@ -46,7 +46,7 @@ class Chromosome:
                     n_ind = 1
                 X = self.parameters[self.parameters[param].max_bit].value / 2 - (
                             self.pack_geometry['cell_n_xyz'][n_ind] - 1) * (
-                                self.pack_geometry['cell_rz'][0] - self.pack_geometry['Buffer'])
+                                self.pack_geometry['cell_rz'][0] + self.pack_geometry['Buffer'])
 
             else:
                 X = self.parameters[param].max_bit

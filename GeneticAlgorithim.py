@@ -41,8 +41,8 @@ class GeneticAlgorithm():
             p = C.read_params()
             params_all.append(p)
             ts, c, k, rho, dx, dy = self.init_thermal_solve(p)
-            # dt_new = 0.45 / (k / (rho * c) * (1 / (dx ** 2) + 1 / (dy ** 2)))
-            dt_new = 2
+            dt_new = 0.45 / (k / (rho * c) * (1 / (dx ** 2) + 1 / (dy ** 2)))
+            # dt_new = 2
             dt_old = jnp.minimum(dt_new, dt_old)
             pack_params_all.append([dx,dy,k, rho, c])
             ts_all.append(ts)

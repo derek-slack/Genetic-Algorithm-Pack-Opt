@@ -46,7 +46,7 @@ if __name__ == '__main__':
     dt_thermal = 1
     #
     pack_geometry = {'cell_rz': [R, Z], 'cell_to_wall_xyz': None, 'cell_n_xyz': [2, 4],
-                     'pack_xyz': [0.2, 0.2], '2d': True,'mesh_xy':[40,80], 'Buffer': R*0.3}
+                     'pack_xyz': [0.2, 0.2], '2d': True,'mesh_xy':[40,80], 'Buffer': R*0.1}
 
     parameter_list = []
 
@@ -155,9 +155,26 @@ if __name__ == '__main__':
     GA = GeneticAlgorithm(population_size, n_generations, {})
     # best_params = [0.04102651, 0.13016621, 2. ,        0.09012497, 0.1802002]
     # best_params = [0.02265409, 0.09269854/4, 3.,         0.09001389, 0.1814139]
+    # L = (pack_geometry['cell_n_xyz'][0]+1)*2*(R)
+    # W = (pack_geometry['cell_n_xyz'][1]+1)*2*(R)
+    #
+    # L_max = L / 2 - (
+    #         pack_geometry['cell_n_xyz'][0] - 1) * (
+    #         pack_geometry['cell_rz'][0] + pack_geometry['Buffer'])
+    #
+    # W_max = W / 2 - (
+    #         pack_geometry['cell_n_xyz'][1] - 1) * (
+    #         pack_geometry['cell_rz'][0] + pack_geometry['Buffer'])
+    #
+    # L_min_P = (pack_geometry['cell_n_xyz'][0]+1)*2*R
+    # W_min_P = (pack_geometry['cell_n_xyz'][1] + 1) *2* R
+    #
+    # L_min = R+pack_geometry['Buffer']
+    # W_min = R+pack_geometry['Buffer']
 
+    # best_params = [L_min,W_min,2., L_min_P, W_min_P]
     GA.obj_func = obj_vmap
-    GA.heat_step_explicit = heat_step_adi
+    GA.heat_step_explicit = heat_step_rk2
 
     GA.T_i = 298
     GA.t_sim = 60*60
