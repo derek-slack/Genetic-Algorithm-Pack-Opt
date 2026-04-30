@@ -251,7 +251,7 @@ class ThermalSolver():
                 dz_b = (abs(dz_c) - (self.cell_rz[1])/2)  # distance to border
 
 
-                d_gen = self.dx/0.95 # Generation term
+                d_gen = 0.001 # Generation term
 
                 # Outer side surface
                 side_wall = (abs(dr_b) <= d_gen) & (abs(dz_c) <= self.cell_rz[1] / 2)
@@ -285,10 +285,10 @@ class ThermalSolver():
                 # dist to bound
                 dr_b = dr_c - self.cell_rz[0]  # distance to border
 
-                d_gen = self.dx/0.85 # Generation term
+                d_gen = self.dx/0.9 # Generation term
 
                 # Outer side surface
-                side_wall = abs(dr_b) <= d_gen
+                side_wall = (dr_b >= -d_gen) & (dr_b <= 0)
 
                 # Combine
                 all_gen = side_wall
@@ -301,7 +301,10 @@ class ThermalSolver():
 
                 self.mesh.generation_cells |= all_gen
                 self.mesh.boundary_cell |= all_bound
-                self.mesh.active |= all_active
+
+        all_active = (~self.mesh.generation_cells) & (~self.mesh.boundary_cell)
+
+        self.mesh.active |= all_active
 
     def calculate_Q_dot(self, Q_dot_model):
         count_cell = 0

@@ -54,6 +54,7 @@ class Chromosome:
             n = self.parameters_encoded[param].n_bit
 
             param_real = (int(V,2)/(2**n - 1))*(X-M) + M
+            self.parameters[param].value = param_real
             param_array[i] = param_real
         return param_array
 

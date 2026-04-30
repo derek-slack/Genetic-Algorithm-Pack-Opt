@@ -8,15 +8,22 @@ from Chromosome import Chromosome
 
 from Thermal_Solver import ThermalSolver
 
+import matplotlib
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
+
 
 class GeneticAlgorithm():
-    def __init__(self, population_size, n_generations, parameters):
+    def __init__(self, population_size, n_generations, parameters, thermal_solve = False):
         self.population_size = population_size
         self.n_generations = n_generations
         self.process_parameters(parameters)
+        self.thermal_solve = thermal_solve
+        self.pack_geometry = None
 
     def process_parameters(self, parameters):
         default_params = {'Fitness':0.6,'Crossover Rate':0.6,'Elitism':4, 'Mutation Rate':0.10}
+        default_params.update(parameters)
         self.Fitness_cutoff = default_params['Fitness']
         self.crossover_rate = default_params['Crossover Rate']
         self.elitism = default_params['Elitism']
@@ -31,27 +38,38 @@ class GeneticAlgorithm():
             population.append(C)
         self.population = population
 
-    def evaluation_fitness(self, population):
+    def evaluation_fitness_thermal(self, population):
         params_all = []
         pack_params_all = []
         ts_all = []
         Q_dot_all = []
+        geo_error_all = []
         dt_old = 100
         for C in population:
             p = C.read_params()
             params_all.append(p)
             ts, c, k, rho, dx, dy = self.init_thermal_solve(p)
             dt_new = 0.45 / (k / (rho * c) * (1 / (dx ** 2) + 1 / (dy ** 2)))
+            Bi_x = (50*dx)/k
+            Bi_y = (50 * dy) / k
+            dt_Bi_x = (dx ** 2) / (2 * (k / (rho * c)) * (1 + Bi_x))
+            dt_Bi_y = (dy**2)/(2*(k/(rho*c))*(1+Bi_y))
             # dt_new = 2
-            dt_old = jnp.minimum(dt_new, dt_old)
+            dt_old = np.min([dt_new, dt_old,dt_Bi_x,dt_Bi_y])
             pack_params_all.append([dx,dy,k, rho, c])
             ts_all.append(ts)
 
             thickness_z = 0.008
             active_volume = jnp.sum(ts.mesh.generation_cells) * dx * dy * thickness_z
-            volumetric_q = 0.5 / active_volume
+            not_active = jnp.sum(~ts.mesh.active) * dx * dy
+            volumetric_q = 10 / active_volume
+            geometric_error = (not_active - 8 * np.pi * self.pack_geometry["cell_rz"][0] ** 2) / (
+                        8 * np.pi * self.pack_geometry["cell_rz"][0] ** 2)
+            geo_error_all.append(geometric_error)
             Q_dot_i = ts.mesh.generation_cells * volumetric_q
+
             Q_dot_all.append(Q_dot_i)
+
         print(f'dt set to {dt_old}')
         time_step = jnp.arange(0, self.t_sim,step=dt_old)
         Ti_all = jnp.ones(np.shape(ts_all[0].mesh.active)) * 298
@@ -59,20 +77,36 @@ class GeneticAlgorithm():
         params_all = jnp.array(params_all)
         pack_params_all = jnp.array(pack_params_all)
         pack_params_all = jnp.hstack([pack_params_all, np.ones([len(population),1])*dt_old])
+        geo_error_all = jnp.array(geo_error_all)
         # Ti_all = jnp.array(Ti_all)
         Q_dot_all = jnp.array(Q_dot_all)
         T = Ti_all
         T_max = self.f(Ti_all, Q_dot_all, pack_params_all, time_step)
 
-        fitness = self.obj_func(params_all, T_max, self.T_runaway)
+        fitness = self.obj_func(params_all, T_max,pack_params_all[:,3], self.T_runaway, geo_error_all)
         print(f'Max temp all: {jnp.max(T_max)}')
         for i, C in enumerate(population):
             C.fitness = fitness[i].item()
+
+
+    def evaluation_fitness(self, population):
+        params_all = []
+
+        for C in population:
+            p = C.read_params()
+            params_all.append(p)
+
+        params_all = jnp.array(params_all)
+
+        fitness = self.obj_func(params_all)
+        for i, C in enumerate(population):
+            C.fitness = fitness[i].item()
+
     def selection(self):
         selected = np.zeros(self.population_size)
         fitness_sum = 0
         min_fitness = 1e10
-        max_fitness = 0
+        max_fitness = -1e10
         for i, C in enumerate(self.population):
             min_fitness = min(min_fitness,C.fitness)
             max_fitness = max(max_fitness, C.fitness)
@@ -130,15 +164,19 @@ class GeneticAlgorithm():
     def simulate(self):
 
         self.f = self.prepare_solve()
-        self.evaluation_fitness(self.population)
+        if self.thermal_solve:
+            evaluate = self.evaluation_fitness_thermal
+        else:
+            evaluate = self.evaluation_fitness
 
+        evaluate(self.population)
         for i in range(self.n_generations):
             pop_pairs = self.selection()
             new_pop = self.crossover(pop_pairs)
             for C in new_pop:
                 self.mutate(C)
 
-            self.evaluation_fitness(new_pop)
+            evaluate(new_pop)
             self.population = new_pop + self.elite
 
         return self.population
@@ -166,23 +204,86 @@ class GeneticAlgorithm():
 
         return jax.vmap(run_thermal_sim, in_axes=(None, 0,0,None))
 
+    def plot_thermal(self, best_params,gif=False):
+        ts, c, k, rho, dx, dy = self.init_thermal_solve(best_params)
+        dt_new = 0.45 / (k / (rho * c) * (1 / (dx ** 2) + 1 / (dy ** 2)))
+        Bi_x = (50 * dx) / k
+        Bi_y = (50 * dy) / k
+        dt_Bi_x = (dx ** 2) / (2 * (k / (rho * c)) * (1 + Bi_x))
+        dt_Bi_y = (dy ** 2) / (2 * (k / (rho * c)) * (1 + Bi_y))
+        dt = np.min([dt_new, dt_Bi_x, dt_Bi_y])
+        pack_params = [dx, dy, k, rho, c, dt]
+
+        thickness_z = 0.008
+        active_volume = jnp.sum(ts.mesh.generation_cells) * dx * dy * thickness_z
+
+        volumetric_q =  10 / active_volume
+        Q_dot = ts.mesh.generation_cells * volumetric_q
+        time_steps = jnp.arange(0, self.t_sim,step=dt)
+
+
+        step_fn = lambda T_carry, _: self.heat_step_explicit(T_carry, pack_params, Q_dot)
+        T_last, T_all = jax.lax.scan(step_fn, ts.T, time_steps)
+
+        if not gif:
+
+            fig, ax = plt.subplots(figsize=(10, 8))
+            im = ax.imshow(T_last, cmap='hot', interpolation='nearest')
+            plt.colorbar(im, label='Temperature (K)')
+            ax.set_title("Final Thermal State")
+            plt.show()
+            return T_last, T_all
+        else:
+
+            from matplotlib.animation import FuncAnimation, PillowWriter
+
+            fig, ax = plt.subplots(figsize=(10, 8))
+
+
+            im = ax.imshow(T_all[0], cmap='hot', interpolation='nearest',
+                           vmin=jnp.min(T_all), vmax=jnp.max(T_last))
+            plt.colorbar(im, label='Temperature (K)')
+            title = ax.set_title(f"Time: 0.0s")
+
+
+            # (e.g., plot every 50th frame)
+            n_frames = T_all.shape[0]
+            step = max(1, n_frames // 100)
+            frame_indices = np.arange(0, n_frames, step)
+
+            def update(i):
+                im.set_array(T_all[i])
+                title.set_text(f"Time: {i * dt:.2f}s")
+                return [im, title]
+
+            ani = FuncAnimation(fig, update, frames=frame_indices, blit=True)
+
+            # Save the animation
+            writer = PillowWriter(fps=20)
+            ani.save("thermal_transient.gif", writer=writer)
+            plt.close()
+
+            print("Gif saved as thermal_transient.gif")
+            return T_last, T_all
+
+
     def extract_pack_materials(self,i):
         if i == 0:
-            c = 1000
-            k = 50
-            rho = 2500
+            c = 1500
+            k = 0.2
+            rho = 1200
         elif i == 1:
-            c = 385
-            k = 30
-            rho = 90
+            c = 1000
+            k = 1.5
+            rho = 2200
         elif i == 2:
-            c = 1053
-            k = 0.3
-            rho = 1890
+            c = 800
+            k = 5.
+            rho = 2500
         elif i == 3:
-            c = 795
-            k = 65
-            rho = 2318
+            c = 1200
+            k = 15.
+            rho = 2000
         else:
             raise ValueError('No pack material selected')
         return c, k, rho
@@ -190,7 +291,7 @@ class GeneticAlgorithm():
 
     def best_params(self):
             self.selection()
-            params = self.elite[0].read_params()
+            params = self.elite
             return params
 
     def plot_results(self, best_params):
